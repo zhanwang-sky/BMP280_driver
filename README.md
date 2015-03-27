@@ -17,9 +17,9 @@ INTRODUCTION
 VERSION
 =========
 	- Version of bmp280 sensor driver is:
-		* bmp280.c 		- V2.0.3
-		* bmp280.h 		- V2.0.3
-		* bmp280_support.c 	- V1.0.4
+		* bmp280.c 		- V2.0.4
+		* bmp280.h 		- V2.0.4
+		* bmp280_support.c 	- V1.0.5
 
 INTEGRATION DETAILS
 =====================
@@ -56,6 +56,6 @@ SUPPORTED SENSOR INTERFACE
 
 COPYRIGHT
 ===========
-	- Copyright (C) 2012 - 2014 Bosch Sensortec GmbH
+	- Copyright (C) 2012 - 2015 Bosch Sensortec GmbH
 
 

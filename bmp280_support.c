@@ -1,10 +1,10 @@
  /*
 ****************************************************************************
-* Copyright (C) 2014 Bosch Sensortec GmbH
+* Copyright (C) 2014 - 2015 Bosch Sensortec GmbH
 *
 * bmp280_support.c
-* Date: 2014/12/12
-* Revision: 1.0.4
+* Date: 2015/03/27
+* Revision: 1.0.5
 *
 * Usage: Sensor Driver support file for BMP280 sensor
 *
@@ -125,16 +125,16 @@ struct bmp280_t bmp280;
 s32 bmp280_data_readout_template(void)
 {
 	/* The variable used to assign the standby time*/
-	u8 v_standby_time_u8 = BMP280_ZERO_U8X;
+	u8 v_standby_time_u8 = BMP280_INIT_VALUE;
 	/* The variable used to read uncompensated temperature*/
-	s32 v_data_uncomp_tem_s32 = BMP280_ZERO_U8X;
+	s32 v_data_uncomp_tem_s32 = BMP280_INIT_VALUE;
 	/* The variable used to read uncompensated pressure*/
-	s32 v_data_uncomp_pres_s32 = BMP280_ZERO_U8X;
+	s32 v_data_uncomp_pres_s32 = BMP280_INIT_VALUE;
 	/* The variable used to read real temperature*/
-	s32 v_actual_temp_s32 = BMP280_ZERO_U8X;
+	s32 v_actual_temp_s32 = BMP280_INIT_VALUE;
 	/* The variable used to read real pressure*/
-	u32 v_actual_press_u32 = BMP280_ZERO_U8X;
-	s32 v_actual_press_data_s32 = BMP280_ZERO_U8X;
+	u32 v_actual_press_u32 = BMP280_INIT_VALUE;
+	s32 v_actual_press_data_s32 = BMP280_INIT_VALUE;
 	/* result of communication results*/
 	s32 com_rslt = ERROR;
 /*********************** START INITIALIZATION ************************/
@@ -216,15 +216,15 @@ s32 bmp280_data_readout_template(void)
 *---------------------------------------------------------------------*/
 	/* API is used to read the true temperature*/
 	/* Input value as uncompensated temperature*/
-	com_rslt += bmp280_compensate_T_int32(v_actual_temp_s32);
+	com_rslt += bmp280_compensate_temperature_int32(v_actual_temp_s32);
 
 	/* API is used to read the true pressure*/
 	/* Input value as uncompensated pressure*/
-	com_rslt += bmp280_compensate_P_int32(v_actual_press_u32);
+	com_rslt += bmp280_compensate_pressure_int32(v_actual_press_u32);
 
 	/* API is used to read the true temperature and pressure*/
 	/* Input value as uncompensated pressure and temperature*/
-	com_rslt += bmp280_read_pressure_temperature(&v_actual_press_u32, 
+	com_rslt += bmp280_read_pressure_temperature(&v_actual_press_u32,
 	&v_actual_temp_s32);
 /*--------------------------------------------------------------------*
 ************ END READ TRUE PRESSURE AND TEMPERATURE********
@@ -264,7 +264,7 @@ s8 I2C_routine(void) {
 	bmp280.dev_addr = BMP280_I2C_ADDRESS2;
 	bmp280.delay_msec = BMP280_delay_msek;
 
-	return BMP280_ZERO_U8X;
+	return BMP280_INIT_VALUE;
 }
 
 /*---------------------------------------------------------------------------*
@@ -283,7 +283,7 @@ s8 SPI_routine(void) {
 	bmp280.bus_read = BMP280_SPI_bus_read;
 	bmp280.delay_msec = BMP280_delay_msek;
 
-	return BMP280_ZERO_U8X;
+	return BMP280_INIT_VALUE;
 }
 
 /************** I2C/SPI buffer length ******/
@@ -309,11 +309,11 @@ s8 SPI_routine(void) {
  */
 s8  BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
-	s32 iError = BMP280_ZERO_U8X;
+	s32 iError = BMP280_INIT_VALUE;
 	u8 array[I2C_BUFFER_LEN];
-	u8 stringpos = BMP280_ZERO_U8X;
-	array[BMP280_ZERO_U8X] = reg_addr;
-	for (stringpos = BMP280_ZERO_U8X; stringpos < cnt; stringpos++) {
+	u8 stringpos = BMP280_INIT_VALUE;
+	array[BMP280_INIT_VALUE] = reg_addr;
+	for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++) {
 		array[stringpos + BMP280_ONE_U8X] = *(reg_data + stringpos);
 	}
 	/*
@@ -323,7 +323,7 @@ s8  BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 	* add your I2C write function here
 	* iError is an return value of I2C read function
 	* Please select your valid return value
-	* In the driver SUCCESS defined as BMP280_ZERO_U8X
+	* In the driver SUCCESS defined as BMP280_INIT_VALUE
     * and FAILURE defined as -1
 	* Note :
 	* This is a full duplex operation,
@@ -343,20 +343,20 @@ s8  BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
  */
 s8  BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
-	s32 iError = BMP280_ZERO_U8X;
-	u8 array[I2C_BUFFER_LEN] = {BMP280_ZERO_U8X};
-	u8 stringpos = BMP280_ZERO_U8X;
-	array[BMP280_ZERO_U8X] = reg_addr;
+	s32 iError = BMP280_INIT_VALUE;
+	u8 array[I2C_BUFFER_LEN] = {BMP280_INIT_VALUE};
+	u8 stringpos = BMP280_INIT_VALUE;
+	array[BMP280_INIT_VALUE] = reg_addr;
 	/* Please take the below function as your reference
 	 * for read the data using I2C communication
 	 * add your I2C rad function here.
 	 * "IERROR = I2C_WRITE_READ_STRING(DEV_ADDR, ARRAY, ARRAY, 1, CNT)"
 	 * iError is an return value of SPI write function
 	 * Please select your valid return value
-	 * In the driver SUCCESS defined as BMP280_ZERO_U8X
+	 * In the driver SUCCESS defined as BMP280_INIT_VALUE
      * and FAILURE defined as -1
 	 */
-	for (stringpos = BMP280_ZERO_U8X; stringpos < cnt; stringpos++) {
+	for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++) {
 		*(reg_data + stringpos) = array[stringpos];
 	}
 	return (s8)iError;
@@ -371,13 +371,13 @@ s8  BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
  */
 s8  BMP280_SPI_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
-	s32 iError=BMP280_ZERO_U8X;
+	s32 iError=BMP280_INIT_VALUE;
 	u8 array[SPI_BUFFER_LEN]={BUFFER_LENGTH};
 	u8 stringpos;
 	/*	For the SPI mode only 7 bits of register addresses are used.
 	The MSB of register address is declared the bit what functionality it is
-	read/write (read as 1/write as BMP280_ZERO_U8X)*/
-	array[BMP280_ZERO_U8X] = reg_addr|MASK_DATA;/*read routine is initiated register address is mask with 0x80*/
+	read/write (read as 1/write as BMP280_INIT_VALUE)*/
+	array[BMP280_INIT_VALUE] = reg_addr|MASK_DATA;/*read routine is initiated register address is mask with 0x80*/
 	/*
 	* Please take the below function as your reference for
 	* read the data using SPI communication
@@ -385,7 +385,7 @@ s8  BMP280_SPI_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 	* add your SPI read function here
 	* iError is an return value of SPI read function
 	* Please select your valid return value
-	* In the driver SUCCESS defined as BMP280_ZERO_U8X
+	* In the driver SUCCESS defined as BMP280_INIT_VALUE
     * and FAILURE defined as -1
 	* Note :
 	* This is a full duplex operation,
@@ -394,7 +394,7 @@ s8  BMP280_SPI_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 	* and write string function
 	* For more information please refer data sheet SPI communication:
 	*/
-	for (stringpos = BMP280_ZERO_U8X; stringpos < cnt; stringpos++) {
+	for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++) {
 		*(reg_data + stringpos) = array[stringpos+BMP280_ONE_U8X];
 	}
 	return (s8)iError;
@@ -410,12 +410,12 @@ s8  BMP280_SPI_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
  */
 s8  BMP280_SPI_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
-	s32 iError = BMP280_ZERO_U8X;
+	s32 iError = BMP280_INIT_VALUE;
 	u8 array[SPI_BUFFER_LEN * BMP280_TWO_U8X];
-	u8 stringpos = BMP280_ZERO_U8X;
-	for (stringpos = BMP280_ZERO_U8X; stringpos < cnt; stringpos++) {
+	u8 stringpos = BMP280_INIT_VALUE;
+	for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++) {
 		/* the operation of (reg_addr++)&0x7F done: because it ensure the
-		   BMP280_ZERO_U8X and 1 of the given value
+		   BMP280_INIT_VALUE and 1 of the given value
 		   It is done only for 8bit operation*/
 		array[stringpos * BMP280_TWO_U8X] = (reg_addr++) & REGISTER_MASK;
 		array[stringpos * BMP280_TWO_U8X + BMP280_ONE_U8X] = *(reg_data + stringpos);
@@ -426,7 +426,7 @@ s8  BMP280_SPI_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 	 * "IERROR = SPI_WRITE_STRING(ARRAY, CNT*2)"
 	 * iError is an return value of SPI write function
 	 * Please select your valid return value
-	 * In the driver SUCCESS defined as BMP280_ZERO_U8X
+	 * In the driver SUCCESS defined as BMP280_INIT_VALUE
      * and FAILURE defined as -1
 	 */
 	return (s8)iError;

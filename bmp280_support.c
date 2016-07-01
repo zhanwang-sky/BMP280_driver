@@ -1,10 +1,10 @@
  /*
 ****************************************************************************
-* Copyright (C) 2014 - 2015 Bosch Sensortec GmbH
+* Copyright (C) 2015 - 2016 Bosch Sensortec GmbH
 *
 * bmp280_support.c
-* Date: 2015/03/27
-* Revision: 1.0.5
+* Date: 2016/07/01
+* Revision: 1.0.6
 *
 * Usage: Sensor Driver support file for BMP280 sensor
 *
@@ -54,6 +54,8 @@
 /*---------------------------------------------------------------------------*/
 #include "bmp280.h"
 
+#define BMP280_API
+/*Enable the macro BMP280_API to use this support file */
 /*----------------------------------------------------------------------------*
 *  The following functions are used for reading and writing of
 *	sensor data using I2C or SPI communication
@@ -62,35 +64,35 @@
 /*	\Brief: The function is used as I2C bus read
  *	\Return : Status of the I2C read
  *	\param dev_addr : The device address of the sensor
- *	\param reg_addr : Address of the first register, will data is going to be read
- *	\param reg_data : This data read from the sensor, which is hold in an array
- *	\param cnt : The no of byte of data to be read
+ *	\param reg_addr : Address of the first register, where data is going to be read
+ *	\param reg_data : This is the data read from the sensor, which is held in an array
+ *	\param cnt : The no of bytes of data to be read
  */
 s8 BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt);
  /*	\Brief: The function is used as I2C bus write
  *	\Return : Status of the I2C write
  *	\param dev_addr : The device address of the sensor
- *	\param reg_addr : Address of the first register, will data is going to be written
- *	\param reg_data : It is a value hold in the array,
- *		will be used for write the value into the register
- *	\param cnt : The no of byte of data to be write
+ *	\param reg_addr : Address of the first register, where data is to be written
+ *	\param reg_data : It is a value held in the array,
+ *		which is written in the register
+ *	\param cnt : The no of bytes of data to be written
  */
 s8 BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt);
 /*	\Brief: The function is used as SPI bus write
  *	\Return : Status of the SPI write
  *	\param dev_addr : The device address of the sensor
- *	\param reg_addr : Address of the first register, will data is going to be written
- *	\param reg_data : It is a value hold in the array,
- *		will be used for write the value into the register
- *	\param cnt : The no of byte of data to be write
+ *	\param reg_addr : Address of the first register, where data is to be written
+ *	\param reg_data : It is a value held in the array,
+ *		which is written in the register
+ *	\param cnt : The no of bytes of data to be written
  */
 s8 BMP280_SPI_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt);
 /*	\Brief: The function is used as SPI bus read
  *	\Return : Status of the SPI read
  *	\param dev_addr : The device address of the sensor
- *	\param reg_addr : Address of the first register, will data is going to be read
- *	\param reg_data : This data read from the sensor, which is hold in an array
- *	\param cnt : The no of byte of data to be read */
+ *	\param reg_addr : Address of the first register, where data is going to be read
+ *	\param reg_data : This is the data read from the sensor, which is held in an array
+ *	\param cnt : The no of bytes of data to be read */
 s8 BMP280_SPI_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt);
 /*
  * \Brief: SPI/I2C init routine
@@ -126,6 +128,8 @@ s32 bmp280_data_readout_template(void)
 {
 	/* The variable used to assign the standby time*/
 	u8 v_standby_time_u8 = BMP280_INIT_VALUE;
+
+	/* The variables used in individual data read APIs*/
 	/* The variable used to read uncompensated temperature*/
 	s32 v_data_uncomp_tem_s32 = BMP280_INIT_VALUE;
 	/* The variable used to read uncompensated pressure*/
@@ -134,7 +138,17 @@ s32 bmp280_data_readout_template(void)
 	s32 v_actual_temp_s32 = BMP280_INIT_VALUE;
 	/* The variable used to read real pressure*/
 	u32 v_actual_press_u32 = BMP280_INIT_VALUE;
-	s32 v_actual_press_data_s32 = BMP280_INIT_VALUE;
+
+	/* The variables used in combined data read APIs*/
+	/* The variable used to read uncompensated temperature*/
+	s32 v_data_uncomp_tem_combined_s32 = BMP280_INIT_VALUE;
+	/* The variable used to read uncompensated pressure*/
+	s32 v_data_uncomp_pres_combined_s32 = BMP280_INIT_VALUE;
+	/* The variable used to read real temperature*/
+	s32 v_actual_temp_combined_s32 = BMP280_INIT_VALUE;
+	/* The variable used to read real pressure*/
+	u32 v_actual_press_combined_u32 = BMP280_INIT_VALUE;
+
 	/* result of communication results*/
 	s32 com_rslt = ERROR;
 /*********************** START INITIALIZATION ************************/
@@ -167,10 +181,10 @@ s32 bmp280_data_readout_template(void)
 	 *
 	 *	OSS				pressure OSS	temperature OSS
 	 *	ultra low power			x1			x1
-	 *	low power				x2			x1
+	 *	low power			x2			x1
 	 *	standard resolution		x4			x1
 	 *	high resolution			x8			x2
-	 *	ultra high resolution	x16			x2
+	 *	ultra high resolution		x16			x2
 	 */
 	/* The oversampling settings are set by using the following API*/
 	com_rslt += bmp280_set_work_mode(BMP280_ULTRA_LOW_POWER_MODE);
@@ -196,7 +210,7 @@ s32 bmp280_data_readout_template(void)
 /************************* END INITIALIZATION *************************/
 
 /*------------------------------------------------------------------*
-************ START READ UNCOMPENSATED PRESSURE AND TEMPERATURE********
+****** INDIVIDUAL APIs TO READ UNCOMPENSATED PRESSURE AND TEMPERATURE*******
 *---------------------------------------------------------------------*/
 	/* API is used to read the uncompensated temperature*/
 	com_rslt += bmp280_read_uncomp_temperature(&v_data_uncomp_tem_s32);
@@ -204,31 +218,27 @@ s32 bmp280_data_readout_template(void)
 	/* API is used to read the uncompensated pressure*/
 	com_rslt += bmp280_read_uncomp_pressure(&v_data_uncomp_pres_s32);
 
-	/* API is used to read the uncompensated temperature and pressure*/
-	com_rslt += bmp280_read_uncomp_pressure_temperature(&v_actual_press_data_s32,
-	&v_actual_temp_s32);
-/*--------------------------------------------------------------------*
-************ END READ UNCOMPENSATED PRESSURE AND TEMPERATURE********
-*-------------------------------------------------------------------------*/
-
-/*------------------------------------------------------------------*
-************ START READ TRUE PRESSURE AND TEMPERATURE********
-*---------------------------------------------------------------------*/
 	/* API is used to read the true temperature*/
 	/* Input value as uncompensated temperature*/
-	com_rslt += bmp280_compensate_temperature_int32(v_actual_temp_s32);
+	v_actual_temp_s32 = bmp280_compensate_temperature_int32(v_data_uncomp_tem_s32);
 
 	/* API is used to read the true pressure*/
 	/* Input value as uncompensated pressure*/
-	com_rslt += bmp280_compensate_pressure_int32(v_actual_press_u32);
+	v_actual_press_u32 = bmp280_compensate_pressure_int32(v_data_uncomp_pres_s32);
+
+/*------------------------------------------------------------------*
+******* STAND-ALONE APIs TO READ COMBINED TRUE PRESSURE AND TEMPERATURE********
+*---------------------------------------------------------------------*/
+
+
+	/* API is used to read the uncompensated temperature and pressure*/
+	com_rslt += bmp280_read_uncomp_pressure_temperature(&v_data_uncomp_pres_combined_s32,
+	&v_data_uncomp_tem_combined_s32);
 
 	/* API is used to read the true temperature and pressure*/
-	/* Input value as uncompensated pressure and temperature*/
-	com_rslt += bmp280_read_pressure_temperature(&v_actual_press_u32,
-	&v_actual_temp_s32);
-/*--------------------------------------------------------------------*
-************ END READ TRUE PRESSURE AND TEMPERATURE********
-*-------------------------------------------------------------------------*/
+	com_rslt += bmp280_read_pressure_temperature(&v_actual_press_combined_u32,
+	&v_actual_temp_combined_s32);
+
 
 
 /************************* START DE-INITIALIZATION ***********************/
@@ -291,8 +301,11 @@ s8 SPI_routine(void) {
 #define	I2C_BUFFER_LEN 8
 #define SPI_BUFFER_LEN 5
 #define BUFFER_LENGTH	0xFF
-#define	MASK_DATA	0x80
-#define REGISTER_MASK	0x7F
+#define	SPI_READ	0x80
+#define SPI_WRITE	0x7F
+#define BMP280_DATA_INDEX	1
+#define BMP280_ADDRESS_INDEX	2
+
 /*-------------------------------------------------------------------*
 *	This is a sample code for read and write the data by using I2C/SPI
 *	Use either I2C or SPI based on your need
@@ -302,10 +315,10 @@ s8 SPI_routine(void) {
  /*	\Brief: The function is used as I2C bus write
  *	\Return : Status of the I2C write
  *	\param dev_addr : The device address of the sensor
- *	\param reg_addr : Address of the first register, will data is going to be written
- *	\param reg_data : It is a value hold in the array,
- *		will be used for write the value into the register
- *	\param cnt : The no of byte of data to be write
+ *	\param reg_addr : Address of the first register, where data is to be written
+ *	\param reg_data : It is a value held in the array,
+ *		which is written in the register
+ *	\param cnt : The no of bytes of data to be written
  */
 s8  BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
@@ -314,7 +327,7 @@ s8  BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 	u8 stringpos = BMP280_INIT_VALUE;
 	array[BMP280_INIT_VALUE] = reg_addr;
 	for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++) {
-		array[stringpos + BMP280_ONE_U8X] = *(reg_data + stringpos);
+		array[stringpos + BMP280_DATA_INDEX] = *(reg_data + stringpos);
 	}
 	/*
 	* Please take the below function as your reference for
@@ -324,11 +337,11 @@ s8  BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 	* iError is an return value of I2C read function
 	* Please select your valid return value
 	* In the driver SUCCESS defined as BMP280_INIT_VALUE
-    * and FAILURE defined as -1
+	* and FAILURE defined as -1
 	* Note :
 	* This is a full duplex operation,
 	* The first read data is discarded, for that extra write operation
-	* have to be initiated. For that cnt+1 operation done in the I2C write string function
+	* have to be initiated.Thus cnt+1 operation done in the I2C write string function
 	* For more information please refer data sheet SPI communication:
 	*/
 	return (s8)iError;
@@ -337,8 +350,8 @@ s8  BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
  /*	\Brief: The function is used as I2C bus read
  *	\Return : Status of the I2C read
  *	\param dev_addr : The device address of the sensor
- *	\param reg_addr : Address of the first register, will data is going to be read
- *	\param reg_data : This data read from the sensor, which is hold in an array
+ *	\param reg_addr : Address of the first register, where data is going to be read
+ *	\param reg_data : This is the data read from the sensor, which is held in an array
  *	\param cnt : The no of data to be read
  */
 s8  BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
@@ -348,13 +361,13 @@ s8  BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 	u8 stringpos = BMP280_INIT_VALUE;
 	array[BMP280_INIT_VALUE] = reg_addr;
 	/* Please take the below function as your reference
-	 * for read the data using I2C communication
+	 * to read the data using I2C communication
 	 * add your I2C rad function here.
 	 * "IERROR = I2C_WRITE_READ_STRING(DEV_ADDR, ARRAY, ARRAY, 1, CNT)"
 	 * iError is an return value of SPI write function
 	 * Please select your valid return value
 	 * In the driver SUCCESS defined as BMP280_INIT_VALUE
-     * and FAILURE defined as -1
+	 * and FAILURE defined as -1
 	 */
 	for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++) {
 		*(reg_data + stringpos) = array[stringpos];
@@ -365,8 +378,8 @@ s8  BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 /*	\Brief: The function is used as SPI bus read
  *	\Return : Status of the SPI read
  *	\param dev_addr : The device address of the sensor
- *	\param reg_addr : Address of the first register, will data is going to be read
- *	\param reg_data : This data read from the sensor, which is hold in an array
+ *	\param reg_addr : Address of the first register, where data is going to be read
+ *	\param reg_data : This is the data read from the sensor, which is held in an array
  *	\param cnt : The no of data to be read
  */
 s8  BMP280_SPI_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
@@ -375,27 +388,28 @@ s8  BMP280_SPI_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 	u8 array[SPI_BUFFER_LEN]={BUFFER_LENGTH};
 	u8 stringpos;
 	/*	For the SPI mode only 7 bits of register addresses are used.
-	The MSB of register address is declared the bit what functionality it is
-	read/write (read as 1/write as BMP280_INIT_VALUE)*/
-	array[BMP280_INIT_VALUE] = reg_addr|MASK_DATA;/*read routine is initiated register address is mask with 0x80*/
+	The MSB of register address denotes the type of SPI data transfer, whether
+	read/write (read as 1/write as 0)*/
+	array[BMP280_INIT_VALUE] = reg_addr|SPI_READ;
+	/*read routine is initiated by masking register address with 0x80*/
 	/*
-	* Please take the below function as your reference for
+	* Please take the below function as your reference to
 	* read the data using SPI communication
 	* " IERROR = SPI_READ_WRITE_STRING(ARRAY, ARRAY, CNT+1)"
 	* add your SPI read function here
 	* iError is an return value of SPI read function
 	* Please select your valid return value
-	* In the driver SUCCESS defined as BMP280_INIT_VALUE
-    * and FAILURE defined as -1
+	* In the driver SUCCESS defined as 0
+	* and FAILURE defined as -1
 	* Note :
 	* This is a full duplex operation,
 	* The first read data is discarded, for that extra write operation
-	* have to be initiated. For that cnt+1 operation done in the SPI read
+	* have to be initiated. Thus cnt+1 operation done in the SPI read
 	* and write string function
-	* For more information please refer data sheet SPI communication:
+	* For more information please refer the SPI communication in data sheet
 	*/
 	for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++) {
-		*(reg_data + stringpos) = array[stringpos+BMP280_ONE_U8X];
+		*(reg_data + stringpos) = array[stringpos+BMP280_DATA_INDEX];
 	}
 	return (s8)iError;
 }
@@ -403,31 +417,32 @@ s8  BMP280_SPI_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 /*	\Brief: The function is used as SPI bus write
  *	\Return : Status of the SPI write
  *	\param dev_addr : The device address of the sensor
- *	\param reg_addr : Address of the first register, will data is going to be written
- *	\param reg_data : It is a value hold in the array,
- *		will be used for write the value into the register
- *	\param cnt : The no of byte of data to be write
+ *	\param reg_addr : Address of the first register, where data is to be written
+ *	\param reg_data : It is a value held in the array,
+ *		which is written in the register
+ *	\param cnt : The no of bytes of data to be written
  */
 s8  BMP280_SPI_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
 	s32 iError = BMP280_INIT_VALUE;
-	u8 array[SPI_BUFFER_LEN * BMP280_TWO_U8X];
+	u8 array[SPI_BUFFER_LEN * BMP280_ADDRESS_INDEX];
 	u8 stringpos = BMP280_INIT_VALUE;
+	u8 index = BMP280_INIT_VALUE;
+
 	for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++) {
-		/* the operation of (reg_addr++)&0x7F done: because it ensure the
-		   BMP280_INIT_VALUE and 1 of the given value
-		   It is done only for 8bit operation*/
-		array[stringpos * BMP280_TWO_U8X] = (reg_addr++) & REGISTER_MASK;
-		array[stringpos * BMP280_TWO_U8X + BMP280_ONE_U8X] = *(reg_data + stringpos);
+		/* the operation of (reg_addr++)&0x7F done as per the
+		SPI communication protocol specified in the data sheet*/
+		index = stringpos * BMP280_ADDRESS_INDEX;
+		array[index] = (reg_addr++) & SPI_WRITE;
+		array[index + BMP280_DATA_INDEX] = *(reg_data + stringpos);
 	}
 	/* Please take the below function as your reference
-	 * for write the data using SPI communication
+	 * to write the data using SPI communication
 	 * add your SPI write function here.
 	 * "IERROR = SPI_WRITE_STRING(ARRAY, CNT*2)"
 	 * iError is an return value of SPI write function
 	 * Please select your valid return value
-	 * In the driver SUCCESS defined as BMP280_INIT_VALUE
-     * and FAILURE defined as -1
+	 * In the driver SUCCESS is defined as 0 and FAILURE is defined as -1
 	 */
 	return (s8)iError;
 }

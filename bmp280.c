@@ -1,16 +1,16 @@
 /*
-****************************************************************************
-* Copyright (C) 2012 - 2015 Bosch Sensortec GmbH
-*
-* File : bmp280.h
-*
-* Date : 2015/03/27
-*
-* Revision : 2.0.4(Pressure and Temperature compensation code revision is 1.1)
-*
-* Usage: Sensor Driver for BMP280 sensor
-*
-****************************************************************************
+ ****************************************************************************
+ * Copyright (C) 2015 - 2016 Bosch Sensortec GmbH
+ *
+ * File : bmp280.c
+ *
+ * Date : 2016/07/01
+ *
+ * Revision : 2.0.5(Pressure and Temperature compensation code revision is 1.1)
+ *
+ * Usage: Sensor Driver for BMP280 sensor
+ *
+ ****************************************************************************
 *
 * \section License
 *
@@ -79,21 +79,42 @@ static struct bmp280_t *p_bmp280; /**< pointer to BMP280 */
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_init(struct bmp280_t *bmp280)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
+	u8 v_chip_id_read_count = BMP280_CHIP_ID_READ_COUNT;
 
 	p_bmp280 = bmp280;/* assign BMP280 ptr */
-	/* read chip id */
-	com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
-	BMP280_CHIP_ID_REG, &v_data_u8,
-	BMP280_GEN_READ_WRITE_DATA_LENGTH);/* read Chip Id */
+
+	while (v_chip_id_read_count > 0) {
+		/* read chip id */
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CHIP_ID_REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		/* Check for the correct chip id */
+		if ((v_data_u8 == BMP280_CHIP_ID1)
+			|| (v_data_u8 == BMP280_CHIP_ID2)
+			|| (v_data_u8 == BMP280_CHIP_ID3))
+			break;
+		v_chip_id_read_count--;
+		/* Delay added concerning the low speed of power up system to
+		facilitate the proper reading of the chip ID */
+		p_bmp280->delay_msec(BMP280_REGISTER_READ_DELAY);
+	}
+
+	/*assign chip ID to the global structure*/
 	p_bmp280->chip_id = v_data_u8;
-	/* readout bmp280 calibparam structure */
-	com_rslt += bmp280_get_calib_param();
+	/*com_rslt status of chip ID read*/
+	com_rslt = (v_chip_id_read_count == BMP280_INIT_VALUE) ?
+			BMP280_CHIP_ID_READ_FAIL : BMP280_CHIP_ID_READ_SUCCESS;
+
+	if (com_rslt == BMP280_CHIP_ID_READ_SUCCESS) {
+		/* readout bmp280 calibration parameter structure */
+		com_rslt += bmp280_get_calib_param();
+	}
 	return com_rslt;
 }
 /*!
@@ -112,36 +133,36 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_init(struct bmp280_t *bmp280)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_read_uncomp_temperature(
-s32 *v_uncomp_temperature_s32)
+		s32 *v_uncomp_temperature_s32)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	/* Array holding the MSB and LSb value
-	a_data_u8r[0] - Temperature MSB
-	a_data_u8r[1] - Temperature LSB
-	a_data_u8r[2] - Temperature LSB
-	*/
-	u8 a_data_u8r[BMP280_TEMPERATURE_DATA_SIZE] = {
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE};
-	/* check the p_bmp280 struct pointer as NULL*/
+	 a_data_u8r[0] - Temperature MSB
+	 a_data_u8r[1] - Temperature LSB
+	 a_data_u8r[2] - Temperature LSB
+	 */
+	u8 a_data_u8r[BMP280_TEMPERATURE_DATA_SIZE] = {BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE};
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* read temperature data */
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_TEMPERATURE_MSB_REG,
-			a_data_u8r, BMP280_TEMPERATURE_DATA_LENGTH);
-			*v_uncomp_temperature_s32 = (s32)(((
-			(u32) (a_data_u8r[BMP280_TEMPERATURE_MSB_DATA]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS) |
-			(((u32)(a_data_u8r[BMP280_TEMPERATURE_LSB_DATA]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS)
-			| ((u32)a_data_u8r[BMP280_TEMPERATURE_XLSB_DATA]
-			>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* read temperature data */
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_TEMPERATURE_MSB_REG, a_data_u8r,
+				BMP280_TEMPERATURE_DATA_LENGTH);
+		*v_uncomp_temperature_s32 = (s32)((((u32)(
+				a_data_u8r[BMP280_TEMPERATURE_MSB_DATA]))
+				<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS)
+				| (((u32)(
+				a_data_u8r[BMP280_TEMPERATURE_LSB_DATA]))
+				<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS)
+				| ((u32)a_data_u8r[BMP280_TEMPERATURE_XLSB_DATA]
+				>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
+	}
 	return com_rslt;
 }
 /*!
@@ -158,7 +179,7 @@ s32 *v_uncomp_temperature_s32)
  *
  *  @return Actual temperature output as s32
  *
-*/
+ */
 s32 bmp280_compensate_temperature_int32(s32 v_uncomp_temperature_s32)
 {
 	s32 v_x1_u32r = BMP280_INIT_VALUE;
@@ -166,26 +187,27 @@ s32 bmp280_compensate_temperature_int32(s32 v_uncomp_temperature_s32)
 	s32 temperature = BMP280_INIT_VALUE;
 	/* calculate true temperature*/
 	/*calculate x1*/
-	v_x1_u32r  = ((((v_uncomp_temperature_s32
-	>> BMP280_SHIFT_BIT_POSITION_BY_03_BITS) - ((s32)
-	p_bmp280->calib_param.dig_T1
-	<< BMP280_SHIFT_BIT_POSITION_BY_01_BIT))) *
-	((s32)p_bmp280->calib_param.dig_T2))
-	>> BMP280_SHIFT_BIT_POSITION_BY_11_BITS;
+	v_x1_u32r = ((((v_uncomp_temperature_s32
+			>> BMP280_SHIFT_BIT_POSITION_BY_03_BITS)
+			- ((s32)p_bmp280->calib_param.dig_T1
+			<< BMP280_SHIFT_BIT_POSITION_BY_01_BIT)))
+			* ((s32)p_bmp280->calib_param.dig_T2))
+			>> BMP280_SHIFT_BIT_POSITION_BY_11_BITS;
 	/*calculate x2*/
-	v_x2_u32r  = (((((v_uncomp_temperature_s32
-	>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS) -
-	((s32)p_bmp280->calib_param.dig_T1)) *
-	((v_uncomp_temperature_s32 >> BMP280_SHIFT_BIT_POSITION_BY_04_BITS) -
-	((s32)p_bmp280->calib_param.dig_T1)))
-	>> BMP280_SHIFT_BIT_POSITION_BY_12_BITS) *
-	((s32)p_bmp280->calib_param.dig_T3))
-	>> BMP280_SHIFT_BIT_POSITION_BY_14_BITS;
+	v_x2_u32r = (((((v_uncomp_temperature_s32
+			>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS)
+			- ((s32)p_bmp280->calib_param.dig_T1))
+			* ((v_uncomp_temperature_s32
+			>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS)
+			- ((s32)p_bmp280->calib_param.dig_T1)))
+			>> BMP280_SHIFT_BIT_POSITION_BY_12_BITS)
+			* ((s32)p_bmp280->calib_param.dig_T3))
+			>> BMP280_SHIFT_BIT_POSITION_BY_14_BITS;
 	/*calculate t_fine*/
 	p_bmp280->calib_param.t_fine = v_x1_u32r + v_x2_u32r;
 	/*calculate temperature*/
-	temperature  = (p_bmp280->calib_param.t_fine * 5 + 128)
-	>> BMP280_SHIFT_BIT_POSITION_BY_08_BITS;
+	temperature = (p_bmp280->calib_param.t_fine * 5 + 128)
+			>> BMP280_SHIFT_BIT_POSITION_BY_08_BITS;
 
 	return temperature;
 }
@@ -207,35 +229,34 @@ s32 bmp280_compensate_temperature_int32(s32 v_uncomp_temperature_s32)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_read_uncomp_pressure(
-s32 *v_uncomp_pressure_s32)
+		s32 *v_uncomp_pressure_s32)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	/* Array holding the MSB and LSb value
-	a_data_u8[0] - Pressure MSB
-	a_data_u8[1] - Pressure LSB
-	a_data_u8[2] - Pressure LSB
-	*/
-	u8 a_data_u8[BMP280_PRESSURE_DATA_SIZE] = {
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE};
-	/* check the p_bmp280 struct pointer as NULL*/
+	 a_data_u8[0] - Pressure MSB
+	 a_data_u8[1] - Pressure LSB
+	 a_data_u8[2] - Pressure LSB
+	 */
+	u8 a_data_u8[BMP280_PRESSURE_DATA_SIZE] = {BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE};
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_PRESSURE_MSB_REG,
-			a_data_u8, BMP280_PRESSURE_DATA_LENGTH);
-			*v_uncomp_pressure_s32 = (s32)(
-			(((u32)(a_data_u8[BMP280_PRESSURE_MSB_DATA]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS) |
-			(((u32)(a_data_u8[BMP280_PRESSURE_LSB_DATA]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS) |
-			((u32)a_data_u8[BMP280_PRESSURE_XLSB_DATA] >>
-			BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_PRESSURE_MSB_REG, a_data_u8,
+				BMP280_PRESSURE_DATA_LENGTH);
+		*v_uncomp_pressure_s32 = (s32)((((u32)(
+				a_data_u8[BMP280_PRESSURE_MSB_DATA]))
+				<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS)
+				| (((u32)(a_data_u8[BMP280_PRESSURE_LSB_DATA]))
+				<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS)
+				| ((u32)a_data_u8[BMP280_PRESSURE_XLSB_DATA]
+				>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
+	}
 	return com_rslt;
 }
 /*!
@@ -253,7 +274,7 @@ s32 *v_uncomp_pressure_s32)
  *
  *  @return Returns the Actual pressure out put as s32
  *
-*/
+ */
 u32 bmp280_compensate_pressure_int32(s32 v_uncomp_pressure_s32)
 {
 	s32 v_x1_u32r = BMP280_INIT_VALUE;
@@ -261,69 +282,68 @@ u32 bmp280_compensate_pressure_int32(s32 v_uncomp_pressure_s32)
 	u32 v_pressure_u32 = BMP280_INIT_VALUE;
 	/* calculate x1*/
 	v_x1_u32r = (((s32)p_bmp280->calib_param.t_fine)
-	>> BMP280_SHIFT_BIT_POSITION_BY_01_BIT) -
-	(s32)64000;
+			>> BMP280_SHIFT_BIT_POSITION_BY_01_BIT) - (s32)64000;
 	/* calculate x2*/
-	v_x2_u32r = (((v_x1_u32r >> BMP280_SHIFT_BIT_POSITION_BY_02_BITS) *
-	(v_x1_u32r >> BMP280_SHIFT_BIT_POSITION_BY_02_BITS))
-	>> BMP280_SHIFT_BIT_POSITION_BY_11_BITS) *
-	((s32)p_bmp280->calib_param.dig_P6);
+	v_x2_u32r = (((v_x1_u32r >> BMP280_SHIFT_BIT_POSITION_BY_02_BITS)
+			* (v_x1_u32r >> BMP280_SHIFT_BIT_POSITION_BY_02_BITS))
+			>> BMP280_SHIFT_BIT_POSITION_BY_11_BITS)
+			* ((s32)p_bmp280->calib_param.dig_P6);
 	v_x2_u32r = v_x2_u32r + ((v_x1_u32r *
-	((s32)p_bmp280->calib_param.dig_P5))
-	<< BMP280_SHIFT_BIT_POSITION_BY_01_BIT);
-	v_x2_u32r = (v_x2_u32r >> BMP280_SHIFT_BIT_POSITION_BY_02_BITS) +
-	(((s32)p_bmp280->calib_param.dig_P4)
-	<< BMP280_SHIFT_BIT_POSITION_BY_16_BITS);
+			((s32)p_bmp280->calib_param.dig_P5))
+			<< BMP280_SHIFT_BIT_POSITION_BY_01_BIT);
+	v_x2_u32r = (v_x2_u32r >> BMP280_SHIFT_BIT_POSITION_BY_02_BITS)
+			+ (((s32)p_bmp280->calib_param.dig_P4)
+			<< BMP280_SHIFT_BIT_POSITION_BY_16_BITS);
 	/* calculate x1*/
-	v_x1_u32r = (((p_bmp280->calib_param.dig_P3 *
-	(((v_x1_u32r >> BMP280_SHIFT_BIT_POSITION_BY_02_BITS) *
-	(v_x1_u32r >> BMP280_SHIFT_BIT_POSITION_BY_02_BITS))
-	>> BMP280_SHIFT_BIT_POSITION_BY_13_BITS))
-	>> BMP280_SHIFT_BIT_POSITION_BY_03_BITS) +
-	((((s32)p_bmp280->calib_param.dig_P2) *
-	v_x1_u32r) >> BMP280_SHIFT_BIT_POSITION_BY_01_BIT))
-	>> BMP280_SHIFT_BIT_POSITION_BY_18_BITS;
-	v_x1_u32r = ((((32768 + v_x1_u32r)) *
-	((s32)p_bmp280->calib_param.dig_P1))
-	>> BMP280_SHIFT_BIT_POSITION_BY_15_BITS);
+	v_x1_u32r = (((p_bmp280->calib_param.dig_P3
+			* (((v_x1_u32r
+			>> BMP280_SHIFT_BIT_POSITION_BY_02_BITS) * (v_x1_u32r
+			>> BMP280_SHIFT_BIT_POSITION_BY_02_BITS))
+			>> BMP280_SHIFT_BIT_POSITION_BY_13_BITS))
+			>> BMP280_SHIFT_BIT_POSITION_BY_03_BITS)
+			+ ((((s32)p_bmp280->calib_param.dig_P2)
+			* v_x1_u32r)
+			>> BMP280_SHIFT_BIT_POSITION_BY_01_BIT))
+			>> BMP280_SHIFT_BIT_POSITION_BY_18_BITS;
+	v_x1_u32r = ((((32768 + v_x1_u32r))
+			* ((s32)p_bmp280->calib_param.dig_P1))
+			>> BMP280_SHIFT_BIT_POSITION_BY_15_BITS);
 	/* calculate pressure*/
-	v_pressure_u32 = (((u32)(((s32)1048576) - v_uncomp_pressure_s32) -
-	(v_x2_u32r >> BMP280_SHIFT_BIT_POSITION_BY_12_BITS))) * 3125;
+	v_pressure_u32 = (((u32)(((s32)1048576) - v_uncomp_pressure_s32)
+			- (v_x2_u32r >> BMP280_SHIFT_BIT_POSITION_BY_12_BITS)))
+			* 3125;
 	/* check overflow*/
 	if (v_pressure_u32 < 0x80000000)
 		/* Avoid exception caused by division by zero */
 		if (v_x1_u32r != BMP280_INIT_VALUE)
-			v_pressure_u32 =
-			(v_pressure_u32 << BMP280_SHIFT_BIT_POSITION_BY_01_BIT)
-			/ ((u32)v_x1_u32r);
+			v_pressure_u32 = (v_pressure_u32
+					<< BMP280_SHIFT_BIT_POSITION_BY_01_BIT)
+					/ ((u32)v_x1_u32r);
 		else
 			return BMP280_INVALID_DATA;
 	else
-		/* Avoid exception caused by division by zero */
-		if (v_x1_u32r != BMP280_INIT_VALUE)
-			v_pressure_u32 = (v_pressure_u32 /
-			(u32)v_x1_u32r) * 2;
-		else
-			return BMP280_INVALID_DATA;
-		/* calculate x1*/
-		v_x1_u32r = (((s32)
-		p_bmp280->calib_param.dig_P9) *
-		((s32)(((v_pressure_u32
-		>> BMP280_SHIFT_BIT_POSITION_BY_03_BITS)
-		* (v_pressure_u32 >> BMP280_SHIFT_BIT_POSITION_BY_03_BITS))
-		>> BMP280_SHIFT_BIT_POSITION_BY_13_BITS)))
-		>> BMP280_SHIFT_BIT_POSITION_BY_12_BITS;
-		/* calculate x2*/
-		v_x2_u32r = (((s32)(v_pressure_u32
-		>> BMP280_SHIFT_BIT_POSITION_BY_02_BITS)) *
-		((s32)p_bmp280->calib_param.dig_P8))
-		>> BMP280_SHIFT_BIT_POSITION_BY_13_BITS;
-		/* calculate true pressure*/
-		v_pressure_u32 = (u32)
-		((s32)v_pressure_u32 +
-		((v_x1_u32r + v_x2_u32r +
-		p_bmp280->calib_param.dig_P7)
-		>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
+	/* Avoid exception caused by division by zero */
+	if (v_x1_u32r != BMP280_INIT_VALUE)
+		v_pressure_u32 = (v_pressure_u32 / (u32)v_x1_u32r) * 2;
+	else
+		return BMP280_INVALID_DATA;
+	/* calculate x1*/
+	v_x1_u32r = (((s32)p_bmp280->calib_param.dig_P9) * ((s32)(
+			((v_pressure_u32
+			>> BMP280_SHIFT_BIT_POSITION_BY_03_BITS)
+			* (v_pressure_u32
+			>> BMP280_SHIFT_BIT_POSITION_BY_03_BITS))
+			>> BMP280_SHIFT_BIT_POSITION_BY_13_BITS)))
+			>> BMP280_SHIFT_BIT_POSITION_BY_12_BITS;
+	/* calculate x2*/
+	v_x2_u32r = (((s32)(v_pressure_u32 >>
+			BMP280_SHIFT_BIT_POSITION_BY_02_BITS))
+			* ((s32)p_bmp280->calib_param.dig_P8))
+			>> BMP280_SHIFT_BIT_POSITION_BY_13_BITS;
+	/* calculate true pressure*/
+	v_pressure_u32 = (u32)((s32)v_pressure_u32 + ((v_x1_u32r + v_x2_u32r
+			+ p_bmp280->calib_param.dig_P7)
+			>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
 
 	return v_pressure_u32;
 }
@@ -338,57 +358,52 @@ u32 bmp280_compensate_pressure_int32(s32 v_uncomp_pressure_s32)
  *	@retval 0 -> Success
  *	@retval -1 -> Error
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_read_uncomp_pressure_temperature(
-s32 *v_uncomp_pressure_s32,
-s32 *v_uncomp_temperature_s32)
+		s32 *v_uncomp_pressure_s32, s32 *v_uncomp_temperature_s32)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	/* Array holding the temperature and pressure data
-	a_data_u8[0] - Pressure MSB
-	a_data_u8[1] - Pressure LSB
-	a_data_u8[2] - Pressure LSB
-	a_data_u8[3] - Temperature MSB
-	a_data_u8[4] - Temperature LSB
-	a_data_u8[5] - Temperature LSB
-	*/
-	u8 a_data_u8[BMP280_ALL_DATA_FRAME_LENGTH] = {
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE};
-	/* check the p_bmp280 struct pointer as NULL*/
+	 a_data_u8[0] - Pressure MSB
+	 a_data_u8[1] - Pressure LSB
+	 a_data_u8[2] - Pressure LSB
+	 a_data_u8[3] - Temperature MSB
+	 a_data_u8[4] - Temperature LSB
+	 a_data_u8[5] - Temperature LSB
+	 */
+	u8 a_data_u8[BMP280_ALL_DATA_FRAME_LENGTH] = {BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE};
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_PRESSURE_MSB_REG,
-			a_data_u8, BMP280_DATA_FRAME_SIZE);
-			/*Pressure*/
-			*v_uncomp_pressure_s32 = (s32)(
-			(((u32)(a_data_u8[
-			BMP280_DATA_FRAME_PRESSURE_MSB_BYTE]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS) |
-			(((u32)(a_data_u8[
-			BMP280_DATA_FRAME_PRESSURE_LSB_BYTE]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS) |
-			((u32)a_data_u8[
-			BMP280_DATA_FRAME_PRESSURE_XLSB_BYTE] >>
-			BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_PRESSURE_MSB_REG, a_data_u8,
+				BMP280_DATA_FRAME_SIZE);
+		/*Pressure*/
+		*v_uncomp_pressure_s32 = (s32)((((u32)(
+				a_data_u8[BMP280_DATA_FRAME_PRESSURE_MSB_BYTE]))
+				<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS)
+				| (((u32)(
+				a_data_u8[BMP280_DATA_FRAME_PRESSURE_LSB_BYTE]))
+				<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS)
+				| ((u32)a_data_u8[
+				BMP280_DATA_FRAME_PRESSURE_XLSB_BYTE]
+				>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
 
-			/* Temperature */
-			*v_uncomp_temperature_s32 = (s32)(((
-			(u32) (a_data_u8[
-			BMP280_DATA_FRAME_TEMPERATURE_MSB_BYTE]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS) |
-			(((u32)(a_data_u8[
-			BMP280_DATA_FRAME_TEMPERATURE_LSB_BYTE]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS)
-			| ((u32)a_data_u8[
-			BMP280_DATA_FRAME_TEMPERATURE_XLSB_BYTE]
-			>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
-		}
+		/* Temperature */
+		*v_uncomp_temperature_s32 = (s32)((((u32)(a_data_u8[
+				BMP280_DATA_FRAME_TEMPERATURE_MSB_BYTE]))
+				<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS)
+				| (((u32)(a_data_u8[
+				BMP280_DATA_FRAME_TEMPERATURE_LSB_BYTE]))
+				<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS)
+				| ((u32)a_data_u8[
+				BMP280_DATA_FRAME_TEMPERATURE_XLSB_BYTE]
+				>> BMP280_SHIFT_BIT_POSITION_BY_04_BITS));
+	}
 	return com_rslt;
 }
 /*!
@@ -404,29 +419,28 @@ s32 *v_uncomp_temperature_s32)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_read_pressure_temperature(
-u32 *v_pressure_u32,
-s32 *v_temperature_s32)
+		u32 *v_pressure_u32, s32 *v_temperature_s32)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	s32 v_uncomp_pressure_s32 = BMP280_INIT_VALUE;
 	s32 v_uncomp_temperature_s32 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* read uncompensated pressure and temperature*/
-			com_rslt = bmp280_read_uncomp_pressure_temperature(
-			&v_uncomp_pressure_s32, &v_uncomp_temperature_s32);
-			/* read trure pressure and temperature*/
-			*v_temperature_s32 =
-			bmp280_compensate_temperature_int32(
-			v_uncomp_temperature_s32);
-			*v_pressure_u32 = bmp280_compensate_pressure_int32(
-			v_uncomp_pressure_s32);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* read uncompensated pressure and temperature*/
+		com_rslt = bmp280_read_uncomp_pressure_temperature(
+				&v_uncomp_pressure_s32,
+				&v_uncomp_temperature_s32);
+		/* read true pressure and temperature*/
+		*v_temperature_s32 = bmp280_compensate_temperature_int32(
+				v_uncomp_temperature_s32);
+		*v_pressure_u32 = bmp280_compensate_pressure_int32(
+				v_uncomp_pressure_s32);
+	}
 	return com_rslt;
 }
 /*!
@@ -453,85 +467,90 @@ s32 *v_temperature_s32)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_get_calib_param(void)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
-	u8 a_data_u8[BMP280_CALIB_DATA_SIZE] = {
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
-	BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE};
-	/* check the p_bmp280 struct pointer as NULL*/
+	u8 a_data_u8[BMP280_CALIB_DATA_SIZE] = {BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE, BMP280_INIT_VALUE,
+			BMP280_INIT_VALUE, BMP280_INIT_VALUE};
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_TEMPERATURE_CALIB_DIG_T1_LSB_REG,
-			a_data_u8,
-			BMP280_PRESSURE_TEMPERATURE_CALIB_DATA_LENGTH);
-			/* read calibration values*/
-			p_bmp280->calib_param.dig_T1 = (u16)(((
-			(u16)((u8)a_data_u8[
-			BMP280_TEMPERATURE_CALIB_DIG_T1_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[
-			BMP280_TEMPERATURE_CALIB_DIG_T1_LSB]);
-			p_bmp280->calib_param.dig_T2 = (s16)(((
-			(s16)((s8)a_data_u8[
-			BMP280_TEMPERATURE_CALIB_DIG_T2_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_TEMPERATURE_CALIB_DIG_T2_LSB]);
-			p_bmp280->calib_param.dig_T3 = (s16)(((
-			(s16)((s8)a_data_u8[
-			BMP280_TEMPERATURE_CALIB_DIG_T3_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_TEMPERATURE_CALIB_DIG_T3_LSB]);
-			p_bmp280->calib_param.dig_P1 = (u16)(((
-			(u16)((u8)a_data_u8[BMP280_PRESSURE_CALIB_DIG_P1_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P1_LSB]);
-			p_bmp280->calib_param.dig_P2 = (s16)(((
-			(s16)((s8)a_data_u8[BMP280_PRESSURE_CALIB_DIG_P2_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P2_LSB]);
-			p_bmp280->calib_param.dig_P3 = (s16)(((
-			(s16)((s8)a_data_u8[BMP280_PRESSURE_CALIB_DIG_P3_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P3_LSB]);
-			p_bmp280->calib_param.dig_P4 = (s16)(((
-			(s16)((s8)a_data_u8[BMP280_PRESSURE_CALIB_DIG_P4_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P4_LSB]);
-			p_bmp280->calib_param.dig_P5 = (s16)(((
-			(s16)((s8)a_data_u8[BMP280_PRESSURE_CALIB_DIG_P5_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P5_LSB]);
-			p_bmp280->calib_param.dig_P6 = (s16)(((
-			(s16)((s8)a_data_u8[BMP280_PRESSURE_CALIB_DIG_P6_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P6_LSB]);
-			p_bmp280->calib_param.dig_P7 = (s16)(((
-			(s16)((s8)a_data_u8[BMP280_PRESSURE_CALIB_DIG_P7_MSB]))
-			<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P7_LSB]);
-			p_bmp280->calib_param.dig_P8 = (s16)(((
-			(s16)((s8)a_data_u8[
-			BMP280_PRESSURE_CALIB_DIG_P8_MSB])) <<
-			BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P8_LSB]);
-			p_bmp280->calib_param.dig_P9 = (s16)(((
-			(s16)((s8)a_data_u8[
-			BMP280_PRESSURE_CALIB_DIG_P9_MSB])) <<
-			BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
-			| a_data_u8[BMP280_PRESSURE_CALIB_DIG_P9_LSB]);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_TEMPERATURE_CALIB_DIG_T1_LSB_REG,
+				a_data_u8,
+				BMP280_PRESSURE_TEMPERATURE_CALIB_DATA_LENGTH);
+		/* read calibration values*/
+		p_bmp280->calib_param.dig_T1 = (u16)((((u16)((u8)a_data_u8[
+					BMP280_TEMPERATURE_CALIB_DIG_T1_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_TEMPERATURE_CALIB_DIG_T1_LSB]);
+		p_bmp280->calib_param.dig_T2 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_TEMPERATURE_CALIB_DIG_T2_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_TEMPERATURE_CALIB_DIG_T2_LSB]);
+		p_bmp280->calib_param.dig_T3 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_TEMPERATURE_CALIB_DIG_T3_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_TEMPERATURE_CALIB_DIG_T3_LSB]);
+		p_bmp280->calib_param.dig_P1 = (u16)((((u16)((u8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P1_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P1_LSB]);
+		p_bmp280->calib_param.dig_P2 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P2_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P2_LSB]);
+		p_bmp280->calib_param.dig_P3 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P3_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P3_LSB]);
+		p_bmp280->calib_param.dig_P4 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P4_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P4_LSB]);
+		p_bmp280->calib_param.dig_P5 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P5_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P5_LSB]);
+		p_bmp280->calib_param.dig_P6 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P6_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P6_LSB]);
+		p_bmp280->calib_param.dig_P7 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P7_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P7_LSB]);
+		p_bmp280->calib_param.dig_P8 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P8_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P8_LSB]);
+		p_bmp280->calib_param.dig_P9 = (s16)((((s16)((s8)a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P9_MSB]))
+					<< BMP280_SHIFT_BIT_POSITION_BY_08_BITS)
+					| a_data_u8[
+					BMP280_PRESSURE_CALIB_DIG_P9_LSB]);
+	}
 	return com_rslt;
 }
 /*!
@@ -558,82 +577,77 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_get_calib_param(void)
  *	@retval -1 -> Error
  *
  *
-*/
-BMP280_RETURN_FUNCTION_TYPE bmp280_get_oversamp_temperature(
-u8 *v_value_u8)
+ */
+BMP280_RETURN_FUNCTION_TYPE bmp280_get_oversamp_temperature(u8 *v_value_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* read temperature over sampling*/
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			*v_value_u8 = BMP280_GET_BITSLICE(v_data_u8,
-			BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE);
-			/* assign temperature oversampling*/
-			p_bmp280->oversamp_temperature = *v_value_u8;
-		}
-	return com_rslt;
-}
-/*!
- *	@brief This API is used to set
- *	the temperature oversampling setting in the register 0xF4
- *	bits from 5 to 7
- *
- *        value             | Temperature oversampling
- *  ------------------------|------------------------------
- *       0x00               |  BMP280_OVERSAMP_SKIPPED
- *       0x01               |  BMP280_OVERSAMP_1X
- *       0x02               |  BMP280_OVERSAMP_2X
- *       0x03               |  BMP280_OVERSAMP_4X
- *       0x04               |  BMP280_OVERSAMP_8X
- *       0x05,0x06 and 0x07 |  BMP280_OVERSAMP_16X
- *
- *
- *  @param v_value_u8 :The value of temperature over sampling
- *
- *
- *
- *  @return results of bus communication function
- *	@retval 0 -> Success
- *	@retval -1 -> Error
- *
- *
-*/
-BMP280_RETURN_FUNCTION_TYPE bmp280_set_oversamp_temperature(
-u8 v_value_u8)
-{
-	/* variable used to return communication result*/
-	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
-	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
-	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			if (com_rslt == SUCCESS) {
-				/* write over sampling*/
-				v_data_u8 =
-				BMP280_SET_BITSLICE(v_data_u8,
-				BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE,
-				 v_value_u8);
-				com_rslt +=
-				p_bmp280->BMP280_BUS_WRITE_FUNC(
-				p_bmp280->dev_addr,
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* read temperature over sampling*/
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
 				BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE__REG,
 				&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-				p_bmp280->oversamp_temperature = v_value_u8;
-			}
+		*v_value_u8 = BMP280_GET_BITSLICE(v_data_u8,
+				BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE);
+		/* assign temperature oversampling*/
+		p_bmp280->oversamp_temperature = *v_value_u8;
+	}
+	return com_rslt;
+}
+/*!
+ *	@brief This API is used to set
+ *	the temperature oversampling setting in the register 0xF4
+ *	bits from 5 to 7
+ *
+ *        value             | Temperature oversampling
+ *  ------------------------|------------------------------
+ *       0x00               |  BMP280_OVERSAMP_SKIPPED
+ *       0x01               |  BMP280_OVERSAMP_1X
+ *       0x02               |  BMP280_OVERSAMP_2X
+ *       0x03               |  BMP280_OVERSAMP_4X
+ *       0x04               |  BMP280_OVERSAMP_8X
+ *       0x05,0x06 and 0x07 |  BMP280_OVERSAMP_16X
+ *
+ *
+ *  @param v_value_u8 :The value of temperature over sampling
+ *
+ *
+ *
+ *  @return results of bus communication function
+ *	@retval 0 -> Success
+ *	@retval -1 -> Error
+ *
+ *
+ */
+BMP280_RETURN_FUNCTION_TYPE bmp280_set_oversamp_temperature(u8 v_value_u8)
+{
+	/* variable used to return communication result*/
+	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
+	u8 v_data_u8 = BMP280_INIT_VALUE;
+	/* check the p_bmp280 structure pointer as NULL*/
+	if (p_bmp280 == BMP280_NULL) {
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE__REG,
+				&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		if (com_rslt == SUCCESS) {
+			/* write over sampling*/
+			v_data_u8 = BMP280_SET_BITSLICE(v_data_u8,
+				BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE,
+				v_value_u8);
+			com_rslt += p_bmp280->BMP280_BUS_WRITE_FUNC(
+				p_bmp280->dev_addr,
+				BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE__REG,
+				&v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+			p_bmp280->oversamp_temperature = v_value_u8;
 		}
+	}
 	return com_rslt;
 }
 /*!
@@ -660,27 +674,25 @@ u8 v_value_u8)
  *	@retval -1 -> Error
  *
  *
-*/
-BMP280_RETURN_FUNCTION_TYPE bmp280_get_oversamp_pressure(
-u8 *v_value_u8)
+ */
+BMP280_RETURN_FUNCTION_TYPE bmp280_get_oversamp_pressure(u8 *v_value_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* read pressure over sampling */
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			*v_value_u8 = BMP280_GET_BITSLICE(v_data_u8,
-			BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE);
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* read pressure over sampling */
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE__REG,
+				&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		*v_value_u8 = BMP280_GET_BITSLICE(v_data_u8,
+				BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE);
 
-			p_bmp280->oversamp_pressure = *v_value_u8;
-		}
+		p_bmp280->oversamp_pressure = *v_value_u8;
+	}
 	return com_rslt;
 }
 /*!
@@ -707,36 +719,33 @@ u8 *v_value_u8)
  *	@retval -1 -> Error
  *
  *
-*/
-BMP280_RETURN_FUNCTION_TYPE bmp280_set_oversamp_pressure(
-u8 v_value_u8)
+ */
+BMP280_RETURN_FUNCTION_TYPE bmp280_set_oversamp_pressure(u8 v_value_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			if (com_rslt == SUCCESS) {
-				/* write pressure over sampling */
-				v_data_u8 = BMP280_SET_BITSLICE(
-				v_data_u8,
-				BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE,
-				v_value_u8);
-				com_rslt +=
-				p_bmp280->BMP280_BUS_WRITE_FUNC(
-				p_bmp280->dev_addr,
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
 				BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE__REG,
 				&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		if (com_rslt == SUCCESS) {
+			/* write pressure over sampling */
+			v_data_u8 = BMP280_SET_BITSLICE(v_data_u8,
+					BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE,
+					v_value_u8);
+			com_rslt += p_bmp280->BMP280_BUS_WRITE_FUNC(
+				p_bmp280->dev_addr,
+				BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE__REG,
+				&v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
 
-				p_bmp280->oversamp_pressure = v_value_u8;
-			}
+			p_bmp280->oversamp_pressure = v_value_u8;
 		}
+	}
 	return com_rslt;
 }
 /*!
@@ -757,24 +766,23 @@ u8 v_value_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_get_power_mode(u8 *v_power_mode_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_mode_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* read the power mode*/
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CTRL_MEAS_REG_POWER_MODE__REG,
-			&v_mode_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			*v_power_mode_u8 = BMP280_GET_BITSLICE(v_mode_u8,
-			BMP280_CTRL_MEAS_REG_POWER_MODE);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* read the power mode*/
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CTRL_MEAS_REG_POWER_MODE__REG,
+				&v_mode_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		*v_power_mode_u8 = BMP280_GET_BITSLICE(v_mode_u8,
+				BMP280_CTRL_MEAS_REG_POWER_MODE);
+	}
 	return com_rslt;
 }
 /*!
@@ -795,31 +803,32 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_get_power_mode(u8 *v_power_mode_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_set_power_mode(u8 v_power_mode_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_mode_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		if (v_power_mode_u8 <= BMP280_NORMAL_MODE) {
+			/* write the power mode*/
+			v_mode_u8 = (p_bmp280->oversamp_temperature
+					<< BMP280_SHIFT_BIT_POSITION_BY_05_BITS)
+					+ (p_bmp280->oversamp_pressure
+					<< BMP280_SHIFT_BIT_POSITION_BY_02_BITS)
+					+ v_power_mode_u8;
+			com_rslt = p_bmp280->BMP280_BUS_WRITE_FUNC(
+					p_bmp280->dev_addr,
+					BMP280_CTRL_MEAS_REG_POWER_MODE__REG,
+					&v_mode_u8,
+					BMP280_GEN_READ_WRITE_DATA_LENGTH);
 		} else {
-			if (v_power_mode_u8 <= BMP280_NORMAL_MODE) {
-				/* write the power mode*/
-				v_mode_u8 = (p_bmp280->oversamp_temperature <<
-				BMP280_SHIFT_BIT_POSITION_BY_05_BITS) +
-				(p_bmp280->oversamp_pressure <<
-				BMP280_SHIFT_BIT_POSITION_BY_02_BITS)
-				+ v_power_mode_u8;
-				com_rslt = p_bmp280->BMP280_BUS_WRITE_FUNC(
-				p_bmp280->dev_addr,
-				BMP280_CTRL_MEAS_REG_POWER_MODE__REG,
-				&v_mode_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			} else {
 			com_rslt = E_BMP280_OUT_OF_RANGE;
-			}
 		}
+	}
 	return com_rslt;
 }
 /*!
@@ -827,7 +836,7 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_set_power_mode(u8 v_power_mode_u8)
  * The value 0xB6 is written to the 0xE0 register
  * the device is reset using the
  * complete power-on-reset procedure.
- * Softreset can be easily set using bmp280_set_softreset().
+ * Soft reset can be easily set using bmp280_set_softreset().
  *
  * @note Usage Hint : bmp280_set_softreset()
  *
@@ -837,22 +846,21 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_set_power_mode(u8 v_power_mode_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_set_soft_rst(void)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_SOFT_RESET_CODE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* write soft reset */
-			com_rslt = p_bmp280->BMP280_BUS_WRITE_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_RST_REG, &v_data_u8,
-			BMP280_GEN_READ_WRITE_DATA_LENGTH);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* write soft reset */
+		com_rslt = p_bmp280->BMP280_BUS_WRITE_FUNC(p_bmp280->dev_addr,
+				BMP280_RST_REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+	}
 	return com_rslt;
 }
 /*!
@@ -874,24 +882,22 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_set_soft_rst(void)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_get_spi3(u8 *v_enable_disable_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CONFIG_REG_SPI3_ENABLE__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			*v_enable_disable_u8 = BMP280_GET_BITSLICE(
-			v_data_u8,
-			BMP280_CONFIG_REG_SPI3_ENABLE);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CONFIG_REG_SPI3_ENABLE__REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		*v_enable_disable_u8 = BMP280_GET_BITSLICE(v_data_u8,
+				BMP280_CONFIG_REG_SPI3_ENABLE);
+	}
 	return com_rslt;
 }
 /*!
@@ -913,32 +919,30 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_get_spi3(u8 *v_enable_disable_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_set_spi3(u8 v_enable_disable_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CONFIG_REG_SPI3_ENABLE__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			if (com_rslt == SUCCESS) {
-				v_data_u8 = BMP280_SET_BITSLICE(
-				v_data_u8,
-				BMP280_CONFIG_REG_SPI3_ENABLE,
-				v_enable_disable_u8);
-				com_rslt +=
-				p_bmp280->BMP280_BUS_WRITE_FUNC(
-				p_bmp280->dev_addr,
-				BMP280_CONFIG_REG_SPI3_ENABLE__REG,
-				&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CONFIG_REG_SPI3_ENABLE__REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		if (com_rslt == SUCCESS) {
+			v_data_u8 = BMP280_SET_BITSLICE(v_data_u8,
+					BMP280_CONFIG_REG_SPI3_ENABLE,
+					v_enable_disable_u8);
+			com_rslt += p_bmp280->BMP280_BUS_WRITE_FUNC(
+					p_bmp280->dev_addr,
+					BMP280_CONFIG_REG_SPI3_ENABLE__REG,
+					&v_data_u8,
+					BMP280_GEN_READ_WRITE_DATA_LENGTH);
 		}
+	}
 	return com_rslt;
 }
 /*!
@@ -961,24 +965,23 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_set_spi3(u8 v_enable_disable_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_get_filter(u8 *v_value_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* read filter*/
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CONFIG_REG_FILTER__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			*v_value_u8 = BMP280_GET_BITSLICE(v_data_u8,
-			BMP280_CONFIG_REG_FILTER);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* read filter*/
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CONFIG_REG_FILTER__REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		*v_value_u8 = BMP280_GET_BITSLICE(v_data_u8,
+				BMP280_CONFIG_REG_FILTER);
+	}
 	return com_rslt;
 }
 /*!
@@ -1001,31 +1004,29 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_get_filter(u8 *v_value_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_set_filter(u8 v_value_u8)
 {
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = SUCCESS;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* write filter*/
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CONFIG_REG_FILTER__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			if (com_rslt == SUCCESS) {
-				v_data_u8 = BMP280_SET_BITSLICE(
-				v_data_u8,
-				BMP280_CONFIG_REG_FILTER, v_value_u8);
-				com_rslt +=
-				p_bmp280->BMP280_BUS_WRITE_FUNC(
-				p_bmp280->dev_addr,
-				BMP280_CONFIG_REG_FILTER__REG,
-				&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* write filter*/
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CONFIG_REG_FILTER__REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		if (com_rslt == SUCCESS) {
+			v_data_u8 = BMP280_SET_BITSLICE(v_data_u8,
+					BMP280_CONFIG_REG_FILTER, v_value_u8);
+			com_rslt += p_bmp280->BMP280_BUS_WRITE_FUNC(
+					p_bmp280->dev_addr,
+					BMP280_CONFIG_REG_FILTER__REG,
+					&v_data_u8,
+					BMP280_GEN_READ_WRITE_DATA_LENGTH);
 		}
+	}
 	return com_rslt;
 }
 /*!
@@ -1051,24 +1052,23 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_set_filter(u8 v_value_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_get_standby_durn(u8 *v_standby_durn_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* read the standby duration*/
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CONFIG_REG_STANDBY_DURN__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			*v_standby_durn_u8 = BMP280_GET_BITSLICE(v_data_u8,
-			BMP280_CONFIG_REG_STANDBY_DURN);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* read the standby duration*/
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CONFIG_REG_STANDBY_DURN__REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		*v_standby_durn_u8 = BMP280_GET_BITSLICE(v_data_u8,
+				BMP280_CONFIG_REG_STANDBY_DURN);
+	}
 	return com_rslt;
 }
 /*!
@@ -1082,7 +1082,7 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_get_standby_durn(u8 *v_standby_durn_u8)
  *	by the contents of the register t_sb.
  *	Standby time can be set using BMP280_STANDBYTIME_125_MS.
  *
- *	@note bme280_set_standby_durN(BMP280_STANDBYTIME_125_MS)
+ *	@note bmp280_set_standby_durn(BMP280_STANDBYTIME_125_MS)
  *
  *
  *
@@ -1105,33 +1105,31 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_get_standby_durn(u8 *v_standby_durn_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_set_standby_durn(u8 v_standby_durn_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* write the standby duration*/
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			BMP280_CONFIG_REG_STANDBY_DURN__REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			if (com_rslt == SUCCESS) {
-				v_data_u8 =
-				BMP280_SET_BITSLICE(v_data_u8,
-				BMP280_CONFIG_REG_STANDBY_DURN,
-				v_standby_durn_u8);
-				com_rslt +=
-				p_bmp280->BMP280_BUS_WRITE_FUNC(
-				p_bmp280->dev_addr,
-				BMP280_CONFIG_REG_STANDBY_DURN__REG,
-				&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* write the standby duration*/
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				BMP280_CONFIG_REG_STANDBY_DURN__REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		if (com_rslt == SUCCESS) {
+			v_data_u8 = BMP280_SET_BITSLICE(v_data_u8,
+					BMP280_CONFIG_REG_STANDBY_DURN,
+					v_standby_durn_u8);
+			com_rslt += p_bmp280->BMP280_BUS_WRITE_FUNC(
+					p_bmp280->dev_addr,
+					BMP280_CONFIG_REG_STANDBY_DURN__REG,
+					&v_data_u8,
+					BMP280_GEN_READ_WRITE_DATA_LENGTH);
 		}
+	}
 	return com_rslt;
 }
 /*!
@@ -1153,20 +1151,21 @@ BMP280_RETURN_FUNCTION_TYPE bmp280_set_standby_durn(u8 v_standby_durn_u8)
  *	@retval -1 -> Error
  *
  *
-*/
+ */
 BMP280_RETURN_FUNCTION_TYPE bmp280_set_work_mode(u8 v_work_mode_u8)
 {
-/* variable used to return communication result*/
-BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
-u8 v_data_u8 = BMP280_INIT_VALUE;
-/* check the p_bmp280 struct pointer as NULL*/
-if (p_bmp280 == BMP280_NULL) {
-	return  E_BMP280_NULL_PTR;
-} else {
+	/* variable used to return communication result*/
+	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
+	u8 v_data_u8 = BMP280_INIT_VALUE;
+	/* check the p_bmp280 structure pointer as NULL*/
+	if (p_bmp280 == BMP280_NULL) {
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
 	if (v_work_mode_u8 <= BMP280_ULTRA_HIGH_RESOLUTION_MODE) {
 		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-		p_bmp280->dev_addr,	BMP280_CTRL_MEAS_REG,
-		&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
+				p_bmp280->dev_addr,
+				BMP280_CTRL_MEAS_REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
 		if (com_rslt == SUCCESS) {
 			switch (v_work_mode_u8) {
 			/* write work mode*/
@@ -1174,13 +1173,13 @@ if (p_bmp280 == BMP280_NULL) {
 				p_bmp280->oversamp_temperature =
 				BMP280_ULTRALOWPOWER_OVERSAMP_TEMPERATURE;
 				p_bmp280->oversamp_pressure =
-				BMP280_ULTRALOWPOWER_OVERSAMP_PRESSURE;
+					BMP280_ULTRALOWPOWER_OVERSAMP_PRESSURE;
 				break;
 			case BMP280_LOW_POWER_MODE:
 				p_bmp280->oversamp_temperature =
-				BMP280_LOWPOWER_OVERSAMP_TEMPERATURE;
+					BMP280_LOWPOWER_OVERSAMP_TEMPERATURE;
 				p_bmp280->oversamp_pressure =
-				BMP280_LOWPOWER_OVERSAMP_PRESSURE;
+					BMP280_LOWPOWER_OVERSAMP_PRESSURE;
 				break;
 			case BMP280_STANDARD_RESOLUTION_MODE:
 				p_bmp280->oversamp_temperature =
@@ -1202,20 +1201,20 @@ if (p_bmp280 == BMP280_NULL) {
 				break;
 			}
 			v_data_u8 = BMP280_SET_BITSLICE(v_data_u8,
-			BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE,
-			p_bmp280->oversamp_temperature);
+				BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE,
+				p_bmp280->oversamp_temperature);
 			v_data_u8 = BMP280_SET_BITSLICE(v_data_u8,
-			BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE,
-			p_bmp280->oversamp_pressure);
+				BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE,
+				p_bmp280->oversamp_pressure);
 			com_rslt += p_bmp280->BMP280_BUS_WRITE_FUNC(
-			p_bmp280->dev_addr,	BMP280_CTRL_MEAS_REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
+				p_bmp280->dev_addr, BMP280_CTRL_MEAS_REG,
+				&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
 		}
 	} else {
-	com_rslt = E_BMP280_OUT_OF_RANGE;
+		com_rslt = E_BMP280_OUT_OF_RANGE;
 	}
-}
-return com_rslt;
+	}
+	return com_rslt;
 }
 /*!
  *	@brief This API used to read both
@@ -1231,33 +1230,33 @@ return com_rslt;
  *	@retval -1 -> Error
  *
  *
-*/
-BMP280_RETURN_FUNCTION_TYPE
-bmp280_get_forced_uncomp_pressure_temperature(s32 *v_uncomp_pressure_s32,
-s32 *v_uncomp_temperature_s32)
+ */
+BMP280_RETURN_FUNCTION_TYPE bmp280_get_forced_uncomp_pressure_temperature(
+		s32 *v_uncomp_pressure_s32, s32 *v_uncomp_temperature_s32)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
 	u8 v_data_u8 = BMP280_INIT_VALUE;
 	u8 v_waittime_u8 = BMP280_INIT_VALUE;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			/* read pressure and temperature*/
-			v_data_u8 = (p_bmp280->oversamp_temperature
-			<< BMP280_SHIFT_BIT_POSITION_BY_05_BITS) +
-			(p_bmp280->oversamp_pressure
-			<< BMP280_SHIFT_BIT_POSITION_BY_02_BITS) +
-			BMP280_FORCED_MODE;
-			com_rslt = p_bmp280->BMP280_BUS_WRITE_FUNC(
-			p_bmp280->dev_addr,	BMP280_CTRL_MEAS_REG,
-			&v_data_u8, BMP280_GEN_READ_WRITE_DATA_LENGTH);
-			bmp280_compute_wait_time(&v_waittime_u8);
-			p_bmp280->delay_msec(v_waittime_u8);
-			com_rslt += bmp280_read_uncomp_pressure_temperature(
-			v_uncomp_pressure_s32, v_uncomp_temperature_s32);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		/* read pressure and temperature*/
+		v_data_u8 = (p_bmp280->oversamp_temperature
+				<< BMP280_SHIFT_BIT_POSITION_BY_05_BITS)
+				+ (p_bmp280->oversamp_pressure
+				<< BMP280_SHIFT_BIT_POSITION_BY_02_BITS)
+				+ BMP280_FORCED_MODE;
+		com_rslt = p_bmp280->BMP280_BUS_WRITE_FUNC(p_bmp280->dev_addr,
+				BMP280_CTRL_MEAS_REG, &v_data_u8,
+				BMP280_GEN_READ_WRITE_DATA_LENGTH);
+		bmp280_compute_wait_time(&v_waittime_u8);
+		p_bmp280->delay_msec(v_waittime_u8);
+		com_rslt += bmp280_read_uncomp_pressure_temperature(
+				v_uncomp_pressure_s32,
+				v_uncomp_temperature_s32);
+	}
 	return com_rslt;
 }
 /*!
@@ -1277,19 +1276,18 @@ s32 *v_uncomp_temperature_s32)
  *
  *
  */
-BMP280_RETURN_FUNCTION_TYPE bmp280_write_register(u8 v_addr_u8,
-u8 *v_data_u8, u8 v_len_u8)
+BMP280_RETURN_FUNCTION_TYPE bmp280_write_register(u8 v_addr_u8, u8 *v_data_u8,
+		u8 v_len_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_WRITE_FUNC(
-			p_bmp280->dev_addr,
-			v_addr_u8, v_data_u8, v_len_u8);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_WRITE_FUNC(p_bmp280->dev_addr,
+				v_addr_u8, v_data_u8, v_len_u8);
+	}
 	return com_rslt;
 }
 /*!
@@ -1309,19 +1307,18 @@ u8 *v_data_u8, u8 v_len_u8)
  *
  *
  */
-BMP280_RETURN_FUNCTION_TYPE bmp280_read_register(u8 v_addr_u8,
-u8 *v_data_u8, u8 v_len_u8)
+BMP280_RETURN_FUNCTION_TYPE bmp280_read_register(u8 v_addr_u8, u8 *v_data_u8,
+		u8 v_len_u8)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = ERROR;
-	/* check the p_bmp280 struct pointer as NULL*/
+	/* check the p_bmp280 structure pointer as NULL*/
 	if (p_bmp280 == BMP280_NULL) {
-		return  E_BMP280_NULL_PTR;
-		} else {
-			com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(
-			p_bmp280->dev_addr,
-			v_addr_u8, v_data_u8, v_len_u8);
-		}
+		com_rslt = E_BMP280_NULL_PTR;
+	} else {
+		com_rslt = p_bmp280->BMP280_BUS_READ_FUNC(p_bmp280->dev_addr,
+				v_addr_u8, v_data_u8, v_len_u8);
+	}
 	return com_rslt;
 }
 #ifdef BMP280_ENABLE_FLOAT
@@ -1340,27 +1337,26 @@ u8 *v_data_u8, u8 v_len_u8)
  *  @return
  *	Actual temperature in floating point
  *
-*/
+ */
 double bmp280_compensate_temperature_double(s32 v_uncomp_temperature_s32)
 {
 	double v_x1_u32r = BMP280_INIT_VALUE;
 	double v_x2_u32r = BMP280_INIT_VALUE;
 	double temperature = BMP280_INIT_VALUE;
 	/* calculate x1*/
-	v_x1_u32r  = (((double)v_uncomp_temperature_s32) / 16384.0 -
-	((double)p_bmp280->calib_param.dig_T1) / 1024.0) *
+	v_x1_u32r = (((double)v_uncomp_temperature_s32) / 16384.0 -
+			((double)p_bmp280->calib_param.dig_T1) / 1024.0) *
 	((double)p_bmp280->calib_param.dig_T2);
 	/* calculate x2*/
-	v_x2_u32r  = ((((double)v_uncomp_temperature_s32) / 131072.0 -
-	((double)p_bmp280->calib_param.dig_T1) / 8192.0) *
-	(((double)v_uncomp_temperature_s32) / 131072.0 -
-	((double)p_bmp280->calib_param.dig_T1) / 8192.0)) *
+	v_x2_u32r = ((((double)v_uncomp_temperature_s32) / 131072.0 -
+			((double)p_bmp280->calib_param.dig_T1) / 8192.0) *
+			(((double)v_uncomp_temperature_s32) / 131072.0 -
+			((double)p_bmp280->calib_param.dig_T1) / 8192.0)) *
 	((double)p_bmp280->calib_param.dig_T3);
 	/* calculate t_fine*/
 	p_bmp280->calib_param.t_fine = (s32)(v_x1_u32r + v_x2_u32r);
 	/* calculate true pressure*/
-	temperature  = (v_x1_u32r + v_x2_u32r) / 5120.0;
-
+	temperature = (v_x1_u32r + v_x2_u32r) / 5120.0;
 
 	return temperature;
 }
@@ -1379,7 +1375,7 @@ double bmp280_compensate_temperature_double(s32 v_uncomp_temperature_s32)
  *  @return
  *	Actual pressure in floating point
  *
-*/
+ */
 double bmp280_compensate_pressure_double(s32 v_uncomp_pressure_s32)
 {
 	double v_x1_u32r = BMP280_INIT_VALUE;
@@ -1394,22 +1390,22 @@ double bmp280_compensate_pressure_double(s32 v_uncomp_pressure_s32)
 	v_x2_u32r = (v_x2_u32r / 4.0) +
 	(((double)p_bmp280->calib_param.dig_P4) * 65536.0);
 	v_x1_u32r = (((double)p_bmp280->calib_param.dig_P3) *
-	v_x1_u32r * v_x1_u32r / 524288.0 +
-	((double)p_bmp280->calib_param.dig_P2) * v_x1_u32r) / 524288.0;
+		v_x1_u32r * v_x1_u32r / 524288.0 +
+		((double)p_bmp280->calib_param.dig_P2) * v_x1_u32r) / 524288.0;
 	v_x1_u32r = (1.0 + v_x1_u32r / 32768.0) *
 	((double)p_bmp280->calib_param.dig_P1);
 	pressure = 1048576.0 - (double)v_uncomp_pressure_s32;
 	/* Avoid exception caused by division by zero */
-	if (v_x1_u32r != 0.0)
+	if ((v_x1_u32r > 0) || (v_x1_u32r < 0))
 		pressure = (pressure - (v_x2_u32r / 4096.0)) *
-		6250.0 / v_x1_u32r;
+					6250.0 / v_x1_u32r;
 	else
-		return BMP280_INVALID_DATA;
+	return BMP280_INVALID_DATA;
 	v_x1_u32r = ((double)p_bmp280->calib_param.dig_P9) *
 	pressure * pressure / 2147483648.0;
 	v_x2_u32r = pressure * ((double)p_bmp280->calib_param.dig_P8) / 32768.0;
 	pressure = pressure + (v_x1_u32r + v_x2_u32r +
-	((double)p_bmp280->calib_param.dig_P7)) / 16.0;
+			((double)p_bmp280->calib_param.dig_P7)) / 16.0;
 
 	return pressure;
 }
@@ -1430,7 +1426,7 @@ double bmp280_compensate_pressure_double(s32 v_uncomp_pressure_s32)
  *
  *  @return actual pressure as 64bit output
  *
-*/
+ */
 u32 bmp280_compensate_pressure_int64(s32 v_uncomp_pressure_s32)
 {
 	s64 v_x1_s64r = BMP280_INIT_VALUE;
@@ -1441,45 +1437,43 @@ u32 bmp280_compensate_pressure_int64(s32 v_uncomp_pressure_s32)
 	v_x2_s64r = v_x1_s64r * v_x1_s64r *
 	(s64)p_bmp280->calib_param.dig_P6;
 	/* calculate x2*/
-	v_x2_s64r = v_x2_s64r + ((v_x1_s64r *
-	(s64)p_bmp280->calib_param.dig_P5)
-	<< BMP280_SHIFT_BIT_POSITION_BY_17_BITS);
+	v_x2_s64r = v_x2_s64r + ((v_x1_s64r * (s64)p_bmp280->calib_param.dig_P5)
+			<< BMP280_SHIFT_BIT_POSITION_BY_17_BITS);
 	v_x2_s64r = v_x2_s64r +
 	(((s64)p_bmp280->calib_param.dig_P4)
-	<< BMP280_SHIFT_BIT_POSITION_BY_35_BITS);
+			<< BMP280_SHIFT_BIT_POSITION_BY_35_BITS);
 	v_x1_s64r = ((v_x1_s64r * v_x1_s64r *
-	(s64)p_bmp280->calib_param.dig_P3)
-	>> BMP280_SHIFT_BIT_POSITION_BY_08_BITS) +
+			(s64)p_bmp280->calib_param.dig_P3)
+			>> BMP280_SHIFT_BIT_POSITION_BY_08_BITS) +
 	((v_x1_s64r * (s64)p_bmp280->calib_param.dig_P2)
-	<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS);
-	v_x1_s64r = (((((s64)1)
-	<< BMP280_SHIFT_BIT_POSITION_BY_47_BITS) + v_x1_s64r)) *
-	((s64)p_bmp280->calib_param.dig_P1) >>
-	BMP280_SHIFT_BIT_POSITION_BY_33_BITS;
+			<< BMP280_SHIFT_BIT_POSITION_BY_12_BITS);
+	v_x1_s64r = (((((s64)1) << BMP280_SHIFT_BIT_POSITION_BY_47_BITS)
+			+ v_x1_s64r)) * ((s64)p_bmp280->calib_param.dig_P1) >>
+			BMP280_SHIFT_BIT_POSITION_BY_33_BITS;
 	pressure = 1048576 - v_uncomp_pressure_s32;
 	if (v_x1_s64r != BMP280_INIT_VALUE)
-		#if defined __KERNEL__
-			pressure = div64_s64((((pressure
-			<< BMP280_SHIFT_BIT_POSITION_BY_31_BITS) - v_x2_s64r)
-			* 3125), v_x1_s64r);
-		#else
-			pressure = (((pressure
-			<< BMP280_SHIFT_BIT_POSITION_BY_31_BITS) - v_x2_s64r)
-			* 3125) / v_x1_s64r;
-		#endif
+#if defined __KERNEL__
+		pressure = div64_s64((((pressure
+				<< BMP280_SHIFT_BIT_POSITION_BY_31_BITS)
+				- v_x2_s64r) * 3125), v_x1_s64r);
+#else
+		pressure = (((pressure
+				<< BMP280_SHIFT_BIT_POSITION_BY_31_BITS)
+				- v_x2_s64r) * 3125) / v_x1_s64r;
+#endif
 	else
 		return BMP280_INVALID_DATA;
 	v_x1_s64r = (((s64)p_bmp280->calib_param.dig_P9) *
-	(pressure >> BMP280_SHIFT_BIT_POSITION_BY_13_BITS) *
-	(pressure >> BMP280_SHIFT_BIT_POSITION_BY_13_BITS))
+			(pressure >> BMP280_SHIFT_BIT_POSITION_BY_13_BITS) *
+			(pressure >> BMP280_SHIFT_BIT_POSITION_BY_13_BITS))
 	>> BMP280_SHIFT_BIT_POSITION_BY_25_BITS;
 	v_x2_s64r = (((s64)p_bmp280->calib_param.dig_P8) *
-	pressure) >> BMP280_SHIFT_BIT_POSITION_BY_19_BITS;
+			pressure) >> BMP280_SHIFT_BIT_POSITION_BY_19_BITS;
 	/* calculate pressure*/
 	pressure = ((pressure + v_x1_s64r + v_x2_s64r)
-	>> BMP280_SHIFT_BIT_POSITION_BY_08_BITS) +
+			>> BMP280_SHIFT_BIT_POSITION_BY_08_BITS) +
 	(((s64)p_bmp280->calib_param.dig_P7)
-	<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS);
+			<< BMP280_SHIFT_BIT_POSITION_BY_04_BITS);
 	return (u32)pressure;
 }
 #endif
@@ -1496,18 +1490,17 @@ u32 bmp280_compensate_pressure_int64(s32 v_uncomp_pressure_s32)
  *
  *
  */
-BMP280_RETURN_FUNCTION_TYPE bmp280_compute_wait_time(u8
-*v_delaytime_u8r)
+BMP280_RETURN_FUNCTION_TYPE bmp280_compute_wait_time(u8 *v_delaytime_u8r)
 {
 	/* variable used to return communication result*/
 	BMP280_RETURN_FUNCTION_TYPE com_rslt = SUCCESS;
 
-	*v_delaytime_u8r = (T_INIT_MAX + T_MEASURE_PER_OSRS_MAX *
-	(((1 << p_bmp280->oversamp_temperature)
-	>> BMP280_SHIFT_BIT_POSITION_BY_01_BIT) +
-	((1 << p_bmp280->oversamp_pressure)
-	>> BMP280_SHIFT_BIT_POSITION_BY_01_BIT)) +
-	(p_bmp280->oversamp_pressure ? T_SETUP_PRESSURE_MAX : 0) + 15)
-	/ 16;
+	*v_delaytime_u8r = (T_INIT_MAX + T_MEASURE_PER_OSRS_MAX * (((1
+			<< p_bmp280->oversamp_temperature)
+			>> BMP280_SHIFT_BIT_POSITION_BY_01_BIT)
+			+ ((1 << p_bmp280->oversamp_pressure)
+			>> BMP280_SHIFT_BIT_POSITION_BY_01_BIT))
+			+ ((p_bmp280->oversamp_pressure > 0) ?
+			T_SETUP_PRESSURE_MAX : 0) + 15) / 16;
 	return com_rslt;
 }

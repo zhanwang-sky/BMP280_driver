@@ -153,8 +153,8 @@ s32 bmp280_data_readout_template(void)
 	s32 com_rslt = ERROR;
 /*********************** START INITIALIZATION ************************/
   /*	Based on the user need configure I2C or SPI interface.
-   *	It is example code to explain how to use the bma2x2 API*/
-   #ifdef BMP280
+   *	It is example code to explain how to use the bmp280 API*/
+   #ifdef BMP280_API
 	I2C_routine();
 	/*SPI_routine(); */
 	#endif

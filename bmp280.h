@@ -1,59 +1,47 @@
 /**
- * Copyright (C) 2017 - 2018 Bosch Sensortec GmbH
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright
- * notice, this list of conditions and the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright
- * notice, this list of conditions and the following disclaimer in the
- * documentation and/or other materials provided with the distribution.
- *
- * Neither the name of the copyright holder nor the names of the
- * contributors may be used to endorse or promote products derived from
- * this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
- * CONTRIBUTORS "AS IS" AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL COPYRIGHT HOLDER
- * OR CONTRIBUTORS BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
- * OR CONSEQUENTIAL DAMAGES(INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE
- *
- * The information provided is believed to be accurate and reliable.
- * The copyright holder assumes no responsibility
- * for the consequences of use
- * of such information nor for any infringement of patents or
- * other rights of third parties which may result from its use.
- * No license is granted by implication or otherwise under any patent or
- * patent rights of the copyright holder.
- *
- * @file	bmp280.h
- * @date	3 April, 2018
- * @version	3.0.0
- * @brief	Sensor driver for BMP280 barometer
- *
- */
-#ifndef __BMP280_H__
+* Copyright (c) 2020 Bosch Sensortec GmbH. All rights reserved.
+*
+* BSD-3-Clause
+*
+* Redistribution and use in source and binary forms, with or without
+* modification, are permitted provided that the following conditions are met:
+*
+* 1. Redistributions of source code must retain the above copyright
+*    notice, this list of conditions and the following disclaimer.
+*
+* 2. Redistributions in binary form must reproduce the above copyright
+*    notice, this list of conditions and the following disclaimer in the
+*    documentation and/or other materials provided with the distribution.
+*
+* 3. Neither the name of the copyright holder nor the names of its
+*    contributors may be used to endorse or promote products derived from
+*    this software without specific prior written permission.
+*
+* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+* "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+* LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+* FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+* COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+* INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+* (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+* SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+* HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+* STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+* IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+* POSSIBILITY OF SUCH DAMAGE.
+*
+* @file	bmp280.h
+* @date	2020-01-10
+* @version	v3.3.4
+*
+*/#ifndef __BMP280_H__
 #define __BMP280_H__
 
 #include "bmp280_defs.h"
 
 /*! CPP guard */
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 /*!
@@ -201,42 +189,50 @@ int8_t bmp280_get_uncomp_data(struct bmp280_uncomp_data *uncomp_data, const stru
 /*!
  * @brief This API is used to get the compensated temperature from
  * uncompensated temperature. This API uses 32 bit integers.
+ * Temperature in degC, resolution is 0.01 DegC. output value of
+ * "5123" equals 51.23 degree Celsius
  *
+ * @param[out] comp_temp : 32 bit compensated temperature
  * @param[in] uncomp_temp : Raw temperature values from the sensor
  * @param[in] dev : Structure instance of bmp280_dev
  *
- * @return Temperature in degC, resolution is 0.01 DegC. output value of
- * "5123" equals 51.23 degree Celsius.
- *
+ * @return Result of API execution
+ * @retval Zero for Success, non-zero otherwise.
  */
-int32_t bmp280_comp_temp_32bit(uint32_t uncomp_temp, struct bmp280_dev *dev);
+int8_t bmp280_get_comp_temp_32bit(int32_t *comp_temp, int32_t uncomp_temp, struct bmp280_dev *dev);
 
 /*!
  * @brief This API is used to get the compensated pressure from
  * uncompensated pressure. This API uses 32 bit integers.
+ * Pressure in Pa as unsigned 32 bit integer
+ * output value of "96386" equals 96386 Pa = 963.86 hPa
  *
+ * @param[out] comp_pres : 32 bit compensated pressure
  * @param[in] uncomp_pres : Raw pressure values from the sensor
  * @param[in] dev : structure instance of bmp280_dev
  *
- * @return Pressure in Pa as unsigned 32 bit integer
- * output value of "96386" equals 96386 Pa = 963.86 hPa
+ * @return Result of API execution
+ * @retval Zero for Success, non-zero otherwise.
  */
-uint32_t bmp280_comp_pres_32bit(uint32_t uncomp_pres, const struct bmp280_dev *dev);
+int8_t bmp280_get_comp_pres_32bit(uint32_t *comp_pres, uint32_t uncomp_pres, const struct bmp280_dev *dev);
 
 #ifndef BMP280_DISABLE_64BIT_COMPENSATION
 
 /*!
  * @brief This API is used to get the compensated pressure from
  * uncompensated pressure. This API uses 64 bit integers.
+ * Pressure in Pa as unsigned 32 bit integer in Q24.8 format
+ * (24 integer bits and 8 fractional bits). Output value of "24674867"
+ * represents 24674867/256 = 96386.2 Pa = 963.862 hPa
  *
+ * @param[out] pressure : compensated pressure
  * @param[in] uncomp_pres : Raw pressure values from the sensor
  * @param[in] dev : Structure instance of bmp280_dev
  *
- * @return Pressure in Pa as unsigned 32 bit integer in Q24.8 format
- * (24 integer bits and 8 fractional bits). Output value of "24674867"
- * represents 24674867/256 = 96386.2 Pa = 963.862 hPa
+ * @return Result of API execution
+ * @retval Zero for Success, non-zero otherwise.
  */
-uint32_t bmp280_comp_pres_64bit(uint32_t uncomp_press, const struct bmp280_dev *dev);
+int8_t bmp280_get_comp_pres_64bit(uint32_t *pressure, uint32_t uncomp_pres, const struct bmp280_dev *dev);
 
 #endif /* BMP280_DISABLE_64BIT_COMPENSATION */
 
@@ -245,26 +241,32 @@ uint32_t bmp280_comp_pres_64bit(uint32_t uncomp_press, const struct bmp280_dev *
 /*!
  * @brief This API is used to get the compensated temperature from
  * uncompensated temperature. This API uses double floating precision.
+ * Temperature in degree Celsius , double precision. output value
+ * of "51.23" equals 51.23 degC.
  *
+ * @param[out] temperature : compensated temperature
  * @param[in] uncomp_temp : Raw temperature values from the sensor
  * @param[in] dev : Structure instance of bmp280_dev
  *
- * @return Temperature in degree Celsius , double precision. output value
- * of "51.23" equals 51.23 degC.
+ * @return Result of API execution
+ * @retval Zero for Success, non-zero otherwise.
  */
-double bmp280_comp_temp_double(uint32_t uncomp_temp, struct bmp280_dev *dev);
+int8_t bmp280_get_comp_temp_double(double *temperature, int32_t uncomp_temp, struct bmp280_dev *dev);
 
 /*!
  * @brief This API is used to get the compensated pressure from
  * uncompensated pressure. This API uses double floating precision.
+ * Pressure in Pa as double. Output value of "96386.2"
+ * equals 96386.2 Pa = 963.862 hPa
  *
+ * @param[out] pressure : compensated pressure
  * @param[in] uncomp_pres : Raw pressure values from the sensor
  * @param[in] dev : Structure instance of bmp280_dev
  *
- * @return Pressure in Pa as double. Output value of "96386.2"
- * equals 96386.2 Pa = 963.862 hPa
+ * @return Result of API execution
+ * @retval Zero for Success, non-zero otherwise.
  */
-double bmp280_comp_pres_double(uint32_t uncomp_pres, const struct bmp280_dev *dev);
+int8_t bmp280_get_comp_pres_double(double *pressure, uint32_t uncomp_pres, const struct bmp280_dev *dev);
 
 #endif /* BMP280_DISABLE_DOUBLE_COMPENSATION */
 
